@@ -8,15 +8,15 @@ def logout():
     sid = os.environ.get("XDG_SESSION_ID")
     if not sid:
         messagebox.showerror(
-            "Błąd",
-            "Brak XDG_SESSION_ID. Uruchom aplikację wewnątrz sesji graficznej (nie z TTY/SSH)."
+            "Error",
+            "Missing XDG_SESSION_ID. Run the application inside a graphical session (not from TTY/SSH)."
         )
         return
 
     try:
         subprocess.run(["loginctl", "terminate-session", sid], check=True)
     except subprocess.CalledProcessError as e:
-        messagebox.showerror("Błąd", f"Nie udało się wylogować (loginctl): {e}")
+        messagebox.showerror("Error", f"Logout failed (loginctl): {e}")
 
 def main():
     root = tk.Tk()
