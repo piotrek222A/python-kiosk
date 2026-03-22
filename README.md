@@ -49,6 +49,28 @@ The script is interactive (`whiptail`) and prompts for:
 
 - To modify the installed application code, edit files in `/opt/kiosk/`.
 
+## Building an app compatible with logout
+
+To ensure your app works correctly with kiosk logout:
+
+- run the app in a graphical session (Openbox/LightDM), not from TTY/SSH,
+- keep `XDG_SESSION_ID` available in the process environment,
+- implement logout by calling `loginctl terminate-session "$XDG_SESSION_ID"`,
+- optionally provide a UI button labeled **Logout** that triggers this action.
+
+Example Python function:
+
+```python
+import os
+import subprocess
+
+def logout():
+	sid = os.environ.get("XDG_SESSION_ID")
+	if not sid:
+		raise RuntimeError("Missing XDG_SESSION_ID")
+	subprocess.run(["loginctl", "terminate-session", sid], check=True)
+```
+
 ## What gets modified
 
 The script may modify or create, among others:
