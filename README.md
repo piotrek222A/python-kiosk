@@ -49,6 +49,11 @@ The script is interactive (`whiptail`) and prompts for:
 
 - To modify the installed application code, edit files in `/opt/kiosk/`.
 
+## Openbox customization
+
+- You can change the startup command/file in `/home/kiosk/.config/openbox/autostart`.
+- You can change the logout keyboard shortcut in `/home/kiosk/.config/openbox/rc.xml` (the `<keybind>` entry).
+
 ## Building an app compatible with logout
 
 To ensure your app works correctly with kiosk logout:
