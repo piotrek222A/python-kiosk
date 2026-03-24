@@ -2,6 +2,7 @@
 set -euo pipefail
 
 KIOSK_USER="kiosk"
+KIOSK_MGR_GROUP="kiosk_mgr"
 
 ADMIN_USER="$(getent passwd 1000 | cut -d: -f1 || true)"
 [ -n "${ADMIN_USER:-}" ] || { echo "ERROR: No user with UID=1000 found"; exit 1; }
@@ -15,7 +16,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 read_desktop_kv() {
   awk -F= -v k="$2" '
-    $0 ~ "^[[:space:]]*"k"=" {sub(/^[^=]*=/,""); print; exit}
+    $0 ~ "^[[:space:]]*"k"=" {sub(/^[^=]*=/,"\""); print; exit}
   ' "$1" 2>/dev/null || true
 }
 
@@ -85,7 +86,8 @@ confirm_lock_tty_whiptail() {
 }
 
 apply_lock_tty() {
-  [ "${LOCK_TTY:-no}" = "yes" ] || return 0
+  [ "
+${LOCK_TTY:-no}" = "yes" ] || return 0
 
   echo "[HARDEN] Locking TTY: logind + disable getty@tty1..tty6 + disable SysRq + Xorg DontVTSwitch..."
 
@@ -93,18 +95,23 @@ apply_lock_tty() {
     sudo cp -a /etc/systemd/logind.conf "/etc/systemd/logind.conf.bak.$(date +%F-%H%M%S)"
   fi
 
-  if ! grep -qE '^\s*\[Login\]\s*$' /etc/systemd/logind.conf 2>/dev/null; then
+  if ! grep -qE '^
+\s*\[Login\]\s*$' /etc/systemd/logind.conf 2>/dev/null; then
     echo -e "\n[Login]" | sudo tee -a /etc/systemd/logind.conf >/dev/null
   fi
 
-  if grep -qE '^\s*NAutoVTs\s*=' /etc/systemd/logind.conf; then
-    sudo sed -i 's/^\s*NAutoVTs\s*=.*/NAutoVTs=0/' /etc/systemd/logind.conf
+  if grep -qE '^
+\s*NAutoVTs\s*=/' /etc/systemd/logind.conf; then
+    sudo sed -i 's/^
+\s*NAutoVTs\s*=.*$/NAutoVTs=0/' /etc/systemd/logind.conf
   else
     sudo sed -i '/^\s*\[Login\]\s*$/a NAutoVTs=0' /etc/systemd/logind.conf
   fi
 
-  if grep -qE '^\s*ReserveVT\s*=' /etc/systemd/logind.conf; then
-    sudo sed -i 's/^\s*ReserveVT\s*=.*/ReserveVT=0/' /etc/systemd/logind.conf
+  if grep -qE '^
+\s*ReserveVT\s*=/' /etc/systemd/logind.conf; then
+    sudo sed -i 's/^
+\s*ReserveVT\s*=.*$/ReserveVT=0/' /etc/systemd/logind.conf
   else
     sudo sed -i '/^\s*\[Login\]\s*$/a ReserveVT=0' /etc/systemd/logind.conf
   fi
@@ -140,14 +147,18 @@ set_grub_hidden_instant() {
 
   sudo cp -a /etc/default/grub "/etc/default/grub.bak.$(date +%F-%H%M%S)"
 
-  if grep -qE '^\s*GRUB_TIMEOUT=' /etc/default/grub; then
-    sudo sed -i 's/^\s*GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
+  if grep -qE '^
+\s*GRUB_TIMEOUT=' /etc/default/grub; then
+    sudo sed -i 's/^
+\s*GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
   else
     echo 'GRUB_TIMEOUT=0' | sudo tee -a /etc/default/grub >/dev/null
   fi
 
-  if grep -qE '^\s*GRUB_TIMEOUT_STYLE=' /etc/default/grub; then
-    sudo sed -i 's/^\s*GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
+  if grep -qE '^
+\s*GRUB_TIMEOUT_STYLE=' /etc/default/grub; then
+    sudo sed -i 's/^
+\s*GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
   else
     echo 'GRUB_TIMEOUT_STYLE=hidden' | sudo tee -a /etc/default/grub >/dev/null
   fi
@@ -198,15 +209,20 @@ SESMAN="/etc/xrdp/sesman.ini"
 if [ -f "$SESMAN" ]; then
   sudo cp -a "$SESMAN" "$SESMAN.bak.$(date +%F-%H%M%S)"
 
-  if grep -qE '^\s*TerminalServerUsers\s*=' "$SESMAN"; then
-    sudo sed -i "s|^\s*TerminalServerUsers\s*=.*|TerminalServerUsers=$ADMIN_USER|g" "$SESMAN"
+  if grep -qE '^
+\s*TerminalServerUsers\s*=/' "$SESMAN"; then
+    sudo sed -i "s|^
+\s*TerminalServerUsers\s*=.*|TerminalServerUsers=$ADMIN_USER|g" "$SESMAN"
   else
     sudo sed -i "/^\[Security\]/a TerminalServerUsers=$ADMIN_USER" "$SESMAN"
   fi
 
-  if grep -qE '^\s*TerminalServerDeniedUsers\s*=' "$SESMAN"; then
-    if ! grep -qE "^\s*TerminalServerDeniedUsers\s*=.*\b$KIOSK_USER\b" "$SESMAN"; then
-      sudo sed -i "s|^\s*TerminalServerDeniedUsers\s*=\s*|TerminalServerDeniedUsers=$KIOSK_USER,|g" "$SESMAN"
+  if grep -qE '^
+\s*TerminalServerDeniedUsers\s*=/' "$SESMAN"; then
+    if ! grep -qE "^
+\s*TerminalServerDeniedUsers\s*=.*\b$KIOSK_USER\b" "$SESMAN"; then
+      sudo sed -i "s|^
+\s*TerminalServerDeniedUsers\s*=\s*|TerminalServerDeniedUsers=$KIOSK_USER,|g" "$SESMAN"
     fi
   else
     sudo sed -i "/^\[Security\]/a TerminalServerDeniedUsers=$KIOSK_USER" "$SESMAN"
@@ -245,15 +261,32 @@ echo "[8/11] Copying kiosk app (directory '$SOURCE_APP_DIR/') to $KIOSK_DIR/ ...
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -d "$SCRIPT_DIR/$SOURCE_APP_DIR" ] || die "Directory not found: $SCRIPT_DIR/$SOURCE_APP_DIR"
 
+# --- Kiosk management group ---
+echo "[8.x] Setting up group '$KIOSK_MGR_GROUP' for managing $KIOSK_DIR..."
+if ! getent group "$KIOSK_MGR_GROUP" >/dev/null 2>&1; then
+  sudo groupadd "$KIOSK_MGR_GROUP"
+fi
+sudo usermod -aG "$KIOSK_MGR_GROUP" "$ADMIN_USER"
+
 sudo mkdir -p "$KIOSK_DIR"
-sudo rsync -a --delete "$SCRIPT_DIR/$SOURCE_APP_DIR"/ "$KIOSK_DIR"/
+
+sudo rsync -a --delete "$SCRIPT_DIR/$SOURCE_APP_DIR/" "$KIOSK_DIR/"
 
 [ -f "$KIOSK_APP" ] || die "Missing $KIOSK_APP. Make sure app/main.py exists"
 
-sudo chown -R "$ADMIN_USER:$ADMIN_USER" "$KIOSK_DIR"
-sudo find "$KIOSK_DIR" -type d -exec chmod 0755 {} \;
-sudo find "$KIOSK_DIR" -type f -exec chmod 0644 {} \;
-sudo chmod 0755 "$KIOSK_APP"
+# ownership + permissions: ADMIN_USER owns, group manages
+sudo chown -R "$ADMIN_USER:$KIOSK_MGR_GROUP" "$KIOSK_DIR"
+
+# setgid on dirs so new files inherit group
+sudo find "$KIOSK_DIR" -type d -exec chmod 2775 {} \;
+
+# group-writable files
+sudo find "$KIOSK_DIR" -type f -exec chmod 0664 {} \;
+
+# app is executable for owner+group
+sudo chmod 0775 "$KIOSK_APP"
+
+echo "[NOTE] '$ADMIN_USER' was added to group '$KIOSK_MGR_GROUP'. Log out/in (or run: newgrp $KIOSK_MGR_GROUP) for group membership to take effect."
 
 echo "[9/11] LightDM: session settings + (optional) kiosk autologin..."
 sudo mkdir -p /etc/lightdm
@@ -310,7 +343,8 @@ set -eu
 if [ -n "${XDG_SESSION_ID:-}" ]; then
   exec loginctl terminate-session "$XDG_SESSION_ID"
 fi
-exec loginctl kill-user "$(id -u)"
+exec loginctl kill-user "
+$(id -u)"
 EOF
 sudo chmod 0755 /usr/local/bin/kiosk-logout
 
@@ -335,23 +369,19 @@ sudo perl -0777 -i -pe '
 
 # --- KIOSK: Openbox global key blocks (idempotent) ---
 if ! grep -q "KIOSK_KEYBLOCKS_BEGIN" "/home/$KIOSK_USER/.config/openbox/rc.xml"; then
-  sudo perl -0777 -i -pe 's#</keyboard>#  <!-- KIOSK_KEYBLOCKS_BEGIN -->\n  <!-- Block common WM shortcuts (capture keys) -->\n  <keybind key="A-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-S-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-F4">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-space">\n    <action name="Focus"/>\n  </keybind>\n  <!-- KIOSK_KEYBLOCKS_END -->\n</keyboard>#s' \
-    "/home/$KIOSK_USER/.config/openbox/rc.xml"
+  sudo perl -0777 -i -pe 's#</keyboard>#  <!-- KIOSK_KEYBLOCKS_BEGIN -->\n  <!-- Block common WM shortcuts (capture keys) -->\n  <keybind key="A-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-S-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-F4">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-space">\n    <action name="Focus"/>\n  </keybind>\n  <!-- KIOSK_KEYBLOCKS_END -->\n</keyboard>#s' "/home/$KIOSK_USER/.config/openbox/rc.xml"
 fi
 # --- /KIOSK: Openbox global key blocks ---
 
 # Ctrl+X bind: add/update OR remove
 if [ "${ENABLE_CTRLX_BIND:-yes}" = "yes" ]; then
   if ! grep -q 'key="C-X"' "/home/$KIOSK_USER/.config/openbox/rc.xml"; then
-    sudo perl -0777 -i -pe 's#</keyboard>#  <keybind key="C-X">\n    <action name="Execute">\n      <command>/usr/local/bin/kiosk-logout</command>\n    </action>\n  </keybind>\n</keyboard>#s' \
-      "/home/$KIOSK_USER/.config/openbox/rc.xml"
+    sudo perl -0777 -i -pe 's#</keyboard>#  <keybind key="C-X">\n    <action name="Execute">\n      <command>/usr/local/bin/kiosk-logout</command>\n    </action>\n  </keybind>\n</keyboard>#s' "/home/$KIOSK_USER/.config/openbox/rc.xml"
   else
-    sudo perl -0777 -i -pe 's#(<keybind key="C-X">.*?<command>)(.*?)(</command>)#${1}/usr/local/bin/kiosk-logout${3}#s' \
-      "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
+    sudo perl -0777 -i -pe 's#(<keybind key="C-X">.*?<command>)(.*?)(</command>)#${1}/usr/local/bin/kiosk-logout${3}#s' "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
   fi
 else
-  sudo perl -0777 -i -pe 's#\s*<keybind key="C-X">.*?</keybind>\s*##sg' \
-    "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
+  sudo perl -0777 -i -pe 's#\s*<keybind key="C-X">.*?</keybind>\s*##sg' "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
   echo "[INFO] Ctrl+X bind removed from Openbox rc.xml."
 fi
 
@@ -371,6 +401,10 @@ else
 fi
 echo "- TTY switch: blocked (if selected)."
 
+echo
+echo "NOTE: Group '$KIOSK_MGR_GROUP' manages $KIOSK_DIR."
+
+echo
 if whiptail --title "Restart" --yesno "Changes have been applied. Restart the computer now?" 10 70; then
   sudo reboot
 else
