@@ -325,9 +325,17 @@ if [ ! -f "/home/$KIOSK_USER/.config/openbox/rc.xml" ]; then
   sudo chown "$KIOSK_USER:$KIOSK_USER" "/home/$KIOSK_USER/.config/openbox/rc.xml"
 fi
 
+# Remove existing binds that may override our kiosk ones (best-effort).
+sudo perl -0777 -i -pe '
+  s#\s*<keybind[^>]*key="A-Tab"[^>]*>.*?</keybind>\s*##sg;
+  s#\s*<keybind[^>]*key="A-S-Tab"[^>]*>.*?</keybind>\s*##sg;
+  s#\s*<keybind[^>]*key="A-F4"[^>]*>.*?</keybind>\s*##sg;
+  s#\s*<keybind[^>]*key="A-space"[^>]*>.*?</keybind>\s*##sg;
+' "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
+
 # --- KIOSK: Openbox global key blocks (idempotent) ---
 if ! grep -q "KIOSK_KEYBLOCKS_BEGIN" "/home/$KIOSK_USER/.config/openbox/rc.xml"; then
-  sudo perl -0777 -i -pe 's#</keyboard>#  <!-- KIOSK_KEYBLOCKS_BEGIN -->\n  <!-- Block common WM shortcuts -->\n  <keybind key="A-Tab"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-S-Tab"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-Escape"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-space"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="C-Escape"><action name="Execute"><command>/bin/true</command></action></keybind>\n\n  <!-- Alt+F1..F12 (includes Alt+F4) -->\n  <keybind key="A-F1"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F2"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F3"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F4"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F5"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F6"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F7"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F8"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F9"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F10"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F11"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <keybind key="A-F12"><action name="Execute"><command>/bin/true</command></action></keybind>\n  <!-- KIOSK_KEYBLOCKS_END -->\n</keyboard>#s' \
+  sudo perl -0777 -i -pe 's#</keyboard>#  <!-- KIOSK_KEYBLOCKS_BEGIN -->\n  <!-- Block common WM shortcuts (capture keys) -->\n  <keybind key="A-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-S-Tab">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-F4">\n    <action name="Focus"/>\n  </keybind>\n  <keybind key="A-space">\n    <action name="Focus"/>\n  </keybind>\n  <!-- KIOSK_KEYBLOCKS_END -->\n</keyboard>#s' \
     "/home/$KIOSK_USER/.config/openbox/rc.xml"
 fi
 # --- /KIOSK: Openbox global key blocks ---
@@ -342,7 +350,6 @@ if [ "${ENABLE_CTRLX_BIND:-yes}" = "yes" ]; then
       "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
   fi
 else
-  # Remove any existing C-X keybind block (best-effort, non-greedy)
   sudo perl -0777 -i -pe 's#\s*<keybind key="C-X">.*?</keybind>\s*##sg' \
     "/home/$KIOSK_USER/.config/openbox/rc.xml" || true
   echo "[INFO] Ctrl+X bind removed from Openbox rc.xml."
